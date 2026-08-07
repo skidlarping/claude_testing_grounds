@@ -12,6 +12,10 @@
     "ServerScriptService": {
       "Server": {
         "$path": "src/server"
+      },
+
+      "Services": {
+        "$path": "src/services"
       }
     },
 
@@ -19,6 +23,10 @@
       "StarterPlayerScripts": {
         "Client": {
           "$path": "src/client"
+        },
+
+        "Controllers": {
+          "$path": "src/controllers"
         }
       }
     },
