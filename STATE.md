@@ -58,4 +58,56 @@ success and skips the `BindToClose` save loop entirely when `false`.
 - Consider adding `DataService:Update(player, fn)` for transform-style
   mutation if other services end up needing it.
 
+Diff pushed, reviewed and merged. `PlayerData.Default()` was later changed by
+Brax to use a placeholder value instead of real fields (Level/Experience/Coins
+removed, `Placeholder = 1` added).
+
+## Session: CurrencyService creation
+
+### Path
+Same deviation as DataService: placed at `src/services/CurrencyService.luau`,
+not `src/server/services/`, to match the actual Rojo mapping in
+`default.project.json`.
+
+### Data fields
+Added `Cash = 0` and `CashMultiplier = 1` to `PlayerData.Default()`, alongside
+the existing `Placeholder` field. CurrencyService reads/writes these two
+fields directly on the table returned by `DataService:Get(player)` — that
+table is the same reference DataService caches internally, so mutating it in
+place is sufficient, no `DataService:Set` call needed after each change.
+
+### Multiplier application
+`AddCash(player, amount)` multiplies `amount` by the player's current
+`CashMultiplier` before adding it to `Cash`. This was the interpretation
+that fit the task's own reasoning for keeping `CashMultiplier` floored at 1
+("below 1 the cash would just go down") — that only makes sense if earned
+cash actually gets scaled by the multiplier somewhere. `SetCash` is a raw,
+unscaled overwrite (for deductions, admin/debug tools, etc.) and does not
+apply the multiplier.
+
+### Floors
+`Cash` is floored at `BASE_CASH` (0) and `CashMultiplier` at
+`BASE_CASH_MULTIPLIER` (1) via `math.max` on every `Set`/`Add` call. As
+defense against corrupted or manually-edited datastore entries, the service
+also hooks `DataService.DataLoaded` and re-clamps both fields (and fills them
+in if missing) as soon as data loads, before anything else can touch it.
+
+### No networking
+No RemoteEvents/RemoteFunctions and no `Net` usage. All six public methods
+(`GetCash`, `SetCash`, `AddCash`, `GetCashMultiplier`, `SetCashMultiplier`,
+`AddCashMultiplier`) are plain server-side methods meant to be called by
+other services after they've validated whatever triggered the change. If
+`DataService:Get(player)` returns nil (data not loaded yet, or player left),
+Get-style methods fall back to the base values and Set/Add-style methods
+`warn()` and no-op rather than throwing.
+
+### Not done / open items
+- No `ServerLog` (Net remote) integration for warnings, still just local
+  `warn()` calls — same gap noted for DataService's failed saves.
+- No transaction/rollback if a caller adds cash then a save fails right
+  after — cash mutation and persistence are decoupled (persistence is
+  DataService's job via `BindToClose`/`PlayerRemoving`).
+- No upper bound on `Cash` or `CashMultiplier` — only floors exist. Add caps
+  later if game design calls for them.
+
 Diff not pushed, awaiting review.
