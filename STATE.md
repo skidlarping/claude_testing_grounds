@@ -110,7 +110,7 @@ Get-style methods fall back to the base values and Set/Add-style methods
 - No upper bound on `Cash` or `CashMultiplier` — only floors exist. Add caps
   later if game design calls for them.
 
-Diff not pushed, awaiting review.
+Diff pushed, reviewed and merged.
 
 ## Session: bug fix
 
@@ -121,3 +121,71 @@ inside the handler was actually bound to the `Player` instance, and
 `data.Cash` would error on every player load. Restored to a two-param
 signature, `(_: Player, data: any)`, since the `player` argument isn't used
 in the body.
+
+Diff pushed, reviewed and merged.
+
+## Session: ProductService and GamepassService creation
+
+Both at `src/services/`, same path deviation as the other two.
+
+### Shared pattern
+Both services key a table of IDs to handler functions:
+`PRODUCT_HANDLERS[productId] = function(player) ... end` and
+`GAMEPASS_HANDLERS[gamepassId] = function(player) ... end`. Both tables start
+empty, there are no real product/gamepass IDs to register yet, that's on
+Brax to fill in once IDs exist. To register a handler, just add an entry to
+the relevant table, no other wiring needed.
+
+### ProductService
+`ProcessReceipt` looks up the incoming `ProductId` in `PRODUCT_HANDLERS` and
+`pcall`s it. If a handler doesn't exist, or the player left, or the player's
+data isn't loaded yet (`DataService:Get(player)` returns nil), or the handler
+itself errors, `ProcessReceipt` returns `NotProcessedYet` so Roblox retries
+the receipt automatically (it keeps retrying across sessions for up to 3
+days per Roblox's own retry behavior). Only returns `PurchaseGranted` once
+the handler runs without erroring. This means handlers signal failure by
+just erroring, no separate return-value contract needed.
+
+The `DataService:Get(player)` preflight matters because downstream calls
+(e.g. `CurrencyService:AddCash`) silently `warn()` and no-op on missing data
+rather than erroring, so without the preflight a purchase could get marked
+`PurchaseGranted` while the actual reward silently failed to apply.
+
+Only one module can set `MarketplaceService.ProcessReceipt` per game, if
+another service ever needs to react to receipts, funnel it through this
+service's handler table instead of assigning `ProcessReceipt` elsewhere.
+
+### GamepassService
+Ownership isn't rechecked on a timer, it's rechecked once per join via
+`DataService.DataLoaded` (not `Players.PlayerAdded` directly), so the same
+data-not-loaded-yet problem above doesn't bite here either. For every
+gamepass with a registered handler, `UserOwnsGamePassAsync` is checked and
+the handler runs if owned. A live purchase is caught separately via
+`MarketplaceService.PromptGamePassPurchaseFinished`, which also runs the
+handler immediately rather than waiting for a rejoin.
+
+Important: unlike ProductService (exactly-once per receipt, enforced by
+Roblox), GamepassService's handlers run on every join for as long as the
+player owns the pass. Handlers must be written idempotently, permanent
+perks should use `Set`-style calls (e.g.
+`CurrencyService:SetCashMultiplier`) rather than cumulative `Add`-style
+calls, since `Add` would stack further on every rejoin. A true one-time
+grant (e.g. a starting cash bonus tied to owning a pass) needs its own
+guard, a flag written into the player's persisted data, checked by the
+handler before granting, since nothing in GamepassService tracks
+"already granted historically" across sessions on its own.
+
+`GamepassService:Owns(player, gamepassId)` is exposed for other services
+that just need a cheap ownership check (e.g. a passive multiplier check)
+without needing a handler at all, backed by the in-memory cache built on
+`DataLoaded` and updated live on purchase.
+
+### Not done / open items
+- No actual product/gamepass IDs registered yet, both handler tables are
+  empty.
+- No `ServerLog` integration, same gap as the other two services.
+- `GamepassService:Owns` returns `false` if data hasn't loaded yet
+  (`ownedGamepasses[player]` won't exist), callers should be aware ownership
+  checks made before `DataLoaded` fires will read as "not owned."
+
+Diff not pushed, awaiting review.
