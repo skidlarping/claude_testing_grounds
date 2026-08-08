@@ -111,3 +111,13 @@ Get-style methods fall back to the base values and Set/Add-style methods
   later if game design calls for them.
 
 Diff not pushed, awaiting review.
+
+## Session: bug fix
+
+`OnDataLoaded` in CurrencyService was changed (outside this session) to a
+single-param signature `(data: any)`, but it's connected to
+`DataService.DataLoaded`, which fires `(player, data)`. That meant `data`
+inside the handler was actually bound to the `Player` instance, and
+`data.Cash` would error on every player load. Restored to a two-param
+signature, `(_: Player, data: any)`, since the `player` argument isn't used
+in the body.

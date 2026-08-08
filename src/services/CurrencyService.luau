@@ -16,7 +16,7 @@ local function ClampMultiplier(amount: number): number
 	return math.max(BASE_CASH_MULTIPLIER, amount)
 end
 
-local function OnDataLoaded(data: any)
+local function OnDataLoaded(_: Player, data: any)
 	data.Cash = ClampCash(data.Cash or BASE_CASH)
 	data.CashMultiplier = ClampMultiplier(data.CashMultiplier or BASE_CASH_MULTIPLIER)
 end
