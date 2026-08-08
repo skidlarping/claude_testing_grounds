@@ -1,5 +1,5 @@
 local PlayerScripts = game:GetService("Players").LocalPlayer.PlayerScripts
-local controllers = PlayerScripts.Controllers
+local controllers = PlayerScripts:WaitForChild("Controllers")
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local packages = ReplicatedStorage.Packages
