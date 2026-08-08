@@ -2,9 +2,7 @@ local PlayerData = {}
 
 function PlayerData.Default()
 	return {
-		Level = 1,
-		Experience = 0,
-		Coins = 0,
+		Placeholder = 1
 	}
 end
 
