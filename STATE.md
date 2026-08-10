@@ -626,3 +626,70 @@ each controller is independent and doesn't know about the other.
   purely a binding/ownership layer, not a preset input scheme.
 
 Diff pushed, awaiting review.
+
+## Session: CharacterController creation (Trove evaluated, not retrofitted)
+
+### Trove retrofit decision
+Checked every existing service/controller for connections that would
+benefit from Trove. All existing `:Connect` calls (`DataService`,
+`GamepassService`, `RateLimitService`, `RoundService`, etc.) are bound once
+in `Init()` and live for the server's full lifetime, nothing to clean up
+mid-session. `CameraController`'s single `renderConnection` is already
+correctly guarded with a manual `DisconnectRender` toggle, a single
+connection doesn't gain anything from Trove. Not retrofitted anywhere.
+`CharacterController` (this session) is the first actual fit, since
+per-character connections need to be torn down on every respawn.
+
+### Path
+`src/controllers/CharacterController.luau`, same Rojo mapping as the other
+controllers.
+
+### Ownership of CharacterAdded
+Fills the gap flagged earlier: nothing in the repo owned
+`Players.LocalPlayer.CharacterAdded` before this, every future
+per-character system (camera subject, ragdoll setup, locomotion) hooks
+`CharacterController.CharacterAdded` instead of binding its own listener.
+`Init()` connects `CharacterAdded` once and also handles the case where
+`Character` already exists at `Init()` time (character spawned before this
+controller ran).
+
+### Trove usage
+One module-level `characterTrove`, `:Clean()` runs at the start of every
+`OnCharacterAdded`, before binding anything for the new character. This
+means cleanup happens on the *next* spawn rather than needing a separate
+`CharacterRemoving` listener to trigger it, avoids a race between the old
+character being removed and the new one being added. Currently only holds
+the `Humanoid.Died` connection, but `GetTrove()` is exposed so other
+controllers (ragdoll, combat) can add their own per-character connections
+to the same trove instead of managing their own, keeping cleanup
+centralized in one place rather than every system re-solving it
+independently the way connection cleanup was handled ad hoc in past
+projects (ragdoll's `stateConnections`, `SlapHandService`).
+
+### Defaults
+`WalkSpeed` (16) and `JumpPower` (50) applied on every `CharacterAdded`,
+matching Roblox's own defaults, exists as a single editable point rather
+than because these differ from stock.
+
+### API surface
+- `CharacterController.CharacterAdded` (Signal), fires `(character: Model)`.
+- `CharacterController.CharacterRemoving` (Signal), fires `(character: Model)`
+  on `Humanoid.Died`, not on `CharacterRemoving`, since `Died` fires before
+  the character is actually removed from the world, giving listeners a
+  chance to react while parts still exist (e.g. a death camera).
+- `CharacterController:GetCharacter(): Model?`.
+- `CharacterController:GetHumanoid(): Humanoid?`.
+- `CharacterController:GetTrove()`, exposes the shared per-character trove
+  for other controllers to add their own cleanup-scoped connections to.
+
+### Not done / open items
+- No respawn delay/control, this controller reacts to `CharacterAdded`, it
+  doesn't manage `Players.CharacterAutoLoads` or trigger respawns itself.
+- No R6-specific rigging logic (arm/torso references, etc), scope here is
+  lifecycle and defaults only, per-project rig-specific setup stays in
+  whatever system needs it.
+- `CharacterRemoving` firing on `Died` rather than the character actually
+  leaving `workspace` is a deliberate choice but worth flagging in case a
+  future project wants "character fully gone" instead of "character died".
+
+Diff pushed, awaiting review.
