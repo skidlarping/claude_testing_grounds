@@ -360,3 +360,76 @@ end
   see fail-closed reasoning above.
 
 Diff pushed, awaiting review.
+
+## Session: AnalyticsService creation
+
+### Path
+`src/services/AnalyticsService.luau`, same Rojo mapping as every other
+service.
+
+### Scope
+Thin wrapper around Roblox's built-in `game:GetService("AnalyticsService")`,
+aliased to `RobloxAnalyticsService` to avoid the name collision (same
+pattern `SoundService.luau` used with `RobloxSoundService`). Standalone,
+only depends on `HttpService` and `Players`, no other services. Covers
+onboarding funnels, recurring funnels, economy events, and progression
+events, the four event types Roblox's own service exposes for exactly this
+purpose.
+
+### Recurring funnel session handling
+`LogFunnelStepEvent` needs a `funnelSessionId` to distinguish separate
+passes through a recurring funnel (e.g. a player opening the shop multiple
+times in one session). Rather than auto-generating a session id lazily on
+first use, per session (which would incorrectly treat a player's entire
+play session as one shop visit), `StartFunnel(player, funnelName)` must be
+called explicitly whenever the funnel actually begins (shop opened, round
+started), generating a fresh `HttpService:GenerateGUID(false)` each time.
+`LogFunnelStep` then looks up the current session id for that funnel name
+and warns + no-ops if `StartFunnel` was never called, rather than silently
+logging under a missing or wrong session. Onboarding funnels don't need
+this since `LogOnboardingFunnelStepEvent` has no session concept, it's
+one-time per player by design.
+
+### Progression events
+Used the three convenience methods Roblox already exposes
+(`LogProgressionStartEvent` / `LogProgressionCompleteEvent` /
+`LogProgressionFailEvent`) instead of wrapping the single enum-based
+`LogProgressionEvent`, so callers don't need to know about
+`Enum.AnalyticsProgressionType` at all.
+
+### Economy events
+`LogEconomyEvent` is a direct passthrough with the same signature Roblox's
+version takes (`flowType`, `currencyType`, `endingBalance`, `amount`,
+`transactionType`, `itemSku`). Kept as a passthrough rather than a
+simplified wrapper since callers (e.g. `CurrencyService`) already have all
+of these values on hand when a transaction happens, there's nothing to
+hide here. Having it go through this service instead of every other
+service calling Roblox's `AnalyticsService` directly keeps one central
+place to swap the backend later if an external analytics endpoint is ever
+wanted instead.
+
+### Cleanup
+`Players.PlayerRemoving` clears `funnelSessions[player]`, same pattern as
+`RateLimitService`.
+
+### Constraints carried over from Roblox's own docs, not enforced by this
+### module
+- Events only actually send from the server in a published, live
+  experience, nothing will show up while testing in Studio or in an
+  unpublished place.
+- Onboarding funnel steps are limited to 1-100 by Roblox.
+- Skipped funnel steps are auto-counted as completed by Roblox's side, not
+  something this wrapper can or should change.
+
+### Not done / open items
+- Not wired into `CurrencyService`, `ProductService`, or `GamepassService`
+  yet, those calls need to be added per-game once a specific funnel is
+  actually being tracked (e.g. `AnalyticsService:LogEconomyEvent` inside
+  `CurrencyService:AddCash`), not done blind here since customFields and
+  transaction types are game-specific.
+- No `customFields` parameter exposed on any method yet (Roblox's raw
+  methods support it), left out for now to keep the surface minimal, add
+  per-method as a specific need comes up.
+- No ABTestService integration yet (discussed conceptually, not built).
+
+Diff pushed, awaiting review.
