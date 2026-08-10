@@ -514,3 +514,62 @@ win-condition code never calls `EndRound`), `ENDING_TIME` (5s).
   that game's own spawn/teleport/UI logic.
 
 Diff pushed, awaiting review.
+
+## Session: CameraController creation
+
+### Path
+`src/controllers/CameraController.luau`. Note the request specified
+`src/server/controllers/`, but camera manipulation is inherently
+client-side (`workspace.CurrentCamera` is per-player), so it was placed at
+`src/controllers/`, same Rojo mapping (`StarterPlayerScripts/Controllers`)
+as `SoundController`. Flagged to Brax, not silently changed without
+mention.
+
+### Ownership / lock model
+Single `currentOwner: string?` gates all camera control, same shared-state
+guarding spirit as `RateLimitService`. `Request(owner)` fails loudly (warns
+and returns `false`) if another owner already holds the camera, rather than
+letting two systems (a cutscene and, say, an ADS system) silently fight over
+`CameraType` the way `RoundService`/`LineService` fought over player state
+before the `roundId` guard pattern. `Release(owner)` is a no-op with a warn
+if called by a non-owner, so a stale reference from an already-ended
+cutscene can't clobber whoever holds the camera now.
+
+### State save/restore
+`Request` snapshots `CameraType`/`CameraSubject`/`FieldOfView` into
+`savedState` before handing out ownership. `Release` re-applies that
+snapshot. This is deliberately a fixed default snapshot (`Custom` type,
+character subject, `DEFAULT_FIELD_OF_VIEW`), not a live read of whatever
+the camera happened to be doing, so restore is predictable regardless of
+what the owner mutated mid-cutscene.
+
+### Render loop handling
+`SetRenderHandler(owner, handler)` is how a cutscene drives the camera
+per-frame, sets `CameraType` to `Scriptable` and connects `handler` to
+`RenderStepped`. Only one `RenderStepped` connection is ever live,
+`DisconnectRender` runs before every new connect and inside `Release`, so
+an interrupted cutscene can't leave a dangling connection still writing to
+the camera after ownership changes, same cleanup concern as the
+`stateConnections` pattern from the ragdoll work.
+
+### API surface
+- `CameraController.OwnerChanged` (Signal), fires `(owner: string?)` on
+  every request/release, for UI or other controllers that need to react to
+  camera lock state (e.g. hiding a HUD during a cutscene).
+- `CameraController:Request(owner: string): boolean`.
+- `CameraController:Release(owner: string)`.
+- `CameraController:SetRenderHandler(owner: string, handler: (number) -> ())`.
+- `CameraController:GetOwner(): string?`.
+- `CameraController:IsLocked(): boolean`.
+
+### Not done / open items
+- No queueing, a denied `Request` is just denied, caller decides whether to
+  retry later, no built-in "wait for camera to free up" helper.
+- No built-in tween/interpolation helpers for common camera moves (pan,
+  fade transition, etc), `SetRenderHandler` is a raw per-frame hook only,
+  callers write their own interpolation.
+- `CaptureDefaultState`'s `FieldOfView` fallback (`DEFAULT_FIELD_OF_VIEW`,
+  70) doesn't read the player's actual pre-request FOV, worth revisiting if
+  a project uses non-default FOV settings.
+
+Diff pushed, awaiting review.
