@@ -433,3 +433,84 @@ wanted instead.
 - No ABTestService integration yet (discussed conceptually, not built).
 
 Diff pushed, awaiting review.
+
+## Session: RoundService creation
+
+### Path
+`src/services/RoundService.luau`, same Rojo mapping as every other service.
+
+### What "pasteable framework" means here, vs. the other standalone services
+`DataService`, `LoggingService`, `RateLimitService`, and `AnalyticsService`
+are drop-in-and-just-work, they don't know anything about the game they're
+in. `RoundService` can't be that, since "what happens during a round" is
+different in every game. Instead it owns just the round *lifecycle* (state
+machine + timers) and exposes signals for game-specific services to hook
+into, without ever knowing what those services actually do. Pasting it into
+a new game means editing `CONFIG` for that game's numbers and connecting
+game logic to the signals, no changes to the state machine itself should be
+needed.
+
+### State machine
+Four states: `Waiting` (not enough players), `Intermission` (counting down
+to round start, players can still back out), `InRound` (round active),
+`Ending` (post-round, before looping back). Only depends on `Signal`
+(already a project package) and `Players`, no `DataService` or anything
+game-specific.
+
+### Cancellation via version counter
+Countdown loops (`Countdown(duration, version)`) are spawned with the
+`currentVersion` at the time they start, and check it after every second of
+`task.wait`. `SetState` increments `currentVersion` on every transition, so
+if something forces an early transition (an empty server during
+`Intermission`, `RoundService:EndRound()` called mid-round), any
+in-flight countdown loop from the old state sees a version mismatch and
+just stops rather than continuing to run and firing a stale transition
+later. Chosen over `task.cancel` on stored thread handles, since a version
+check reads clearly next to the state machine logic and avoids needing to
+track thread handles alongside every countdown.
+
+### Empty-server handling
+Two defaults baked in, since "if nobody's here, don't run a round" applies
+to essentially every round-based game: leaving mid-`Intermission` drops
+back to `Waiting` immediately if player count falls under
+`CONFIG.MIN_PLAYERS` (rather than waiting out the full intermission timer
+first), and the last player leaving mid-`InRound` calls
+`RoundService:EndRound("Empty")` immediately rather than letting an empty
+round run for the full `CONFIG.ROUND_TIME`.
+
+### API surface
+- `RoundService.State`, the enum table (`Waiting`/`Intermission`/
+  `InRound`/`Ending`), for callers comparing against `GetState()`.
+- `RoundService.StateChanged` (Signal), fires `(newState, oldState)`.
+- `RoundService.RoundStarting` (Signal), fires when `Intermission` begins,
+  for game logic to reset/prep before the round officially starts.
+- `RoundService.RoundStarted` (Signal), fires when `InRound` begins, for
+  game logic to actually start the mechanic (spawn players, enable damage,
+  etc).
+- `RoundService.RoundEnded` (Signal), fires `(reason: string?)` when
+  `Ending` begins, for game logic to show results/cleanup. `reason` is
+  whatever string the game-specific win-condition code passed to
+  `EndRound`, or `"TimeUp"`/`"Empty"` for the two built-in cases.
+- `RoundService.Tick` (Signal), fires `(state, timeLeft)` once per second
+  during both `Intermission` and `InRound`, one signal for both so a
+  round-timer UI only has to hook one thing.
+- `RoundService:GetState()` / `RoundService:GetTimeLeft()`.
+- `RoundService:EndRound(reason: string?)`, the hook a game's win-condition
+  service calls to end the round early, no-ops outside `InRound`.
+- `RoundService:SkipIntermission()`, forces `Intermission` straight into
+  `InRound`, useful for dev testing or a "ready up" mechanic later.
+
+### CONFIG (the part meant to be edited per game)
+`MIN_PLAYERS` (2), `INTERMISSION_TIME` (10s), `ROUND_TIME` (120s, acts as
+both the round's expected length and a safety cap in case a game's
+win-condition code never calls `EndRound`), `ENDING_TIME` (5s).
+
+### Not done / open items
+- No round history/stats, this is lifecycle only.
+- No per-game win condition logic, by design, that's what `RoundStarted`
+  and `EndRound` are for.
+- Not yet wired into any specific game, next step for whichever project
+  uses this is connecting `RoundStarting`/`RoundStarted`/`RoundEnded` to
+  that game's own spawn/teleport/UI logic.
+
+Diff pushed, awaiting review.
