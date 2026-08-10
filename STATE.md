@@ -252,3 +252,48 @@ single small leaked instance on one client rather than a server-wide leak.
   noted for the other services, still local `warn()` calls.
 
 Diff pushed, awaiting review.
+
+## Session: LoggingService creation
+
+### Path
+`src/services/LoggingService.luau`, same Rojo mapping as every other
+service.
+
+### Scope
+Deliberately has zero dependencies, no `Net`, no `Signal`, no `DataService`,
+so it's the same kind of fully standalone, reusable-in-any-project module as
+`DataService`. Three public methods: `Print`, `Warn`, `Error`, all taking
+`(source: string, message: string)`. All formatting goes through one
+`Format(source, level, message)` helper that prefixes
+`[HH:MM:SS] [LEVEL] [source]` onto the message.
+
+### Error handling decision
+`Error` calls Luau's `warn()`, not `error()`. Actually throwing would unwind
+the caller's stack, which is wrong for a logging call, a service reporting
+"this failed" shouldn't also interrupt its own control flow just by logging
+it. `Warn` and `Error` both go through `warn()` so they render the same way
+in the output, the `[LEVEL]` tag in the formatted string is what
+distinguishes them, since color alone doesn't.
+
+### No webhook
+Explicitly scoped out per Brax, error-level logs stay server-side only, no
+Discord or external integration.
+
+### Relationship to the existing `ServerLog` remote
+Not touched. The `ServerLog` `Net` remote in `init.server.luau` /
+`init.client.luau` is a separate, narrower thing, it broadcasts service
+init success/failure to clients specifically for dev visibility during
+startup. `LoggingService` doesn't replicate to clients at all, it's a
+server-console-only formatting wrapper. Worth considering later whether
+`init.server.luau`'s ad hoc `ServerLog:FireAllClients` calls should route
+through `LoggingService` too, but that would mean giving `LoggingService` a
+client-replication mode, out of scope for what was asked this session.
+
+### Not done / open items
+- No log history/buffering, DataStore-backed log retrieval, or Discord
+  webhook, all explicitly out of scope for now.
+- No integration into existing services yet (DataService, CurrencyService,
+  etc. still use local `warn()` calls directly), migrating those over is a
+  future cleanup, not done automatically here to avoid an unrelated diff.
+
+Diff pushed, awaiting review.
