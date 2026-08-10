@@ -693,3 +693,59 @@ than because these differ from stock.
   future project wants "character fully gone" instead of "character died".
 
 Diff pushed, awaiting review.
+
+## Session: UIController creation
+
+### Path
+`src/controllers/UIController.luau`, same Rojo mapping as the other
+controllers.
+
+### Scope decision
+No GUI assets exist in the repo yet (`src/game_objects`, `StarterGui`, etc.
+are all unset), and per Brax's own notes UI/GFX isn't his area, so this
+controller doesn't presume any asset structure. `Register(name, screen)`
+takes the actual `ScreenGui`/`GuiObject` instance from the caller rather
+than looking it up by a hardcoded `PlayerGui` path, keeps this usable
+regardless of how a given project organizes its UI folder.
+
+### Visibility handling
+`SetScreenVisible` branches on `screen:IsA("ScreenGui")` and toggles
+`Enabled`, otherwise toggles `Visible`. `ScreenGui` doesn't have a
+`Visible` property, so this was necessary to support registering either a
+top-level `ScreenGui` or a `Frame` within one without the caller needing to
+know which toggle applies.
+
+### Stack model
+Not an ownership lock like `CameraController`/`InputController`, multiple
+screens can legitimately be open at once (HUD plus an inventory overlay,
+for example), so `Open`/`Close` don't deny each other. `stack` is an
+ordered list of currently-open screen names, exists for back-navigation
+("close whatever's on top") via `GetTopScreen()`, and for `CloseAll()` to
+tear down in reverse-open order. `Open` on an already-open screen and
+`Close` on an already-closed one are both no-ops (return `false`), not
+errors, since re-opening or double-closing from UI code is a normal,
+expected case, not a bug.
+
+### API surface
+- `UIController.ScreenOpened` (Signal), fires `(name: string)`.
+- `UIController.ScreenClosed` (Signal), fires `(name: string)`.
+- `UIController:Register(name: string, screen: ScreenGui | GuiObject)`,
+  registers and force-hides the screen.
+- `UIController:Open(name: string): boolean`.
+- `UIController:Close(name: string): boolean`.
+- `UIController:CloseAll()`.
+- `UIController:IsOpen(name: string): boolean`.
+- `UIController:GetTopScreen(): string?`.
+
+### Not done / open items
+- No tweened transitions (fade/slide in-out), this is pure visibility
+  toggling, transition polish is left to `EffectsController` (not yet
+  built) or per-project code.
+- No input wiring, e.g. no automatic "Escape closes top screen" binding,
+  intentionally left to a project's own `InputController` binding rather
+  than baked in here.
+- No z-index/layering management beyond whatever `ScreenGui.DisplayOrder`
+  the caller sets themselves, stack order tracks logical open state, not
+  render order.
+
+Diff pushed, awaiting review.
