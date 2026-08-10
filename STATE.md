@@ -573,3 +573,56 @@ the camera after ownership changes, same cleanup concern as the
   a project uses non-default FOV settings.
 
 Diff pushed, awaiting review.
+
+## Session: InputController creation
+
+### Path
+`src/controllers/InputController.luau`, same Rojo mapping as
+`SoundController`/`CameraController`.
+
+### Ownership / lock model
+Same per-key ownership pattern as `CameraController`, but keyed per
+`actionName` instead of a single global owner, since input actions (slap,
+combat swing, camera toggle) are independent of each other and shouldn't
+all fight over one lock the way camera state does. `Bind(owner, actionName,
+...)` wraps `ContextActionService:BindAction`, denies (warns, returns
+`false`) if another owner already holds that action name. `Unbind` is a
+no-op with a warn if called by a non-owner, mirrors `CameraController`'s
+`Release` guard against stale references clobbering the current owner.
+`UnbindAll(owner)` added for a controller/cutscene to release every action
+it holds in one call on cleanup, without needing to track its own action
+name list separately.
+
+### Why ContextActionService over raw UserInputService
+`ContextActionService:BindAction` handles touch button generation
+(`createTouchButton` param), gamepad binding, and priority stacking
+natively, raw `UserInputService.InputBegan` would mean reimplementing
+mobile/gamepad support per action. Matters given prior work on mobile
+pinch-to-zoom for the skill tree, cross-platform input is already a
+concern in this codebase.
+
+### Relationship to CameraController
+Not wired together yet. Intent is a cutscene system calls
+`InputController:UnbindAll(owner)` (or binds a blocking no-op action at
+high priority) alongside `CameraController:Request(owner)`, so camera lock
+and input lock move together, but that pairing wasn't built this session,
+each controller is independent and doesn't know about the other.
+
+### API surface
+- `InputController.ActionBound` (Signal), fires `(actionName, owner)`.
+- `InputController.ActionUnbound` (Signal), fires `(actionName, owner)`.
+- `InputController:Bind(owner, actionName, handler, createTouchButton, ...): boolean`.
+- `InputController:Unbind(owner, actionName)`.
+- `InputController:UnbindAll(owner)`.
+- `InputController:GetOwner(actionName): string?`.
+- `InputController:IsBound(actionName): boolean`.
+
+### Not done / open items
+- No priority/stacking model beyond `ContextActionService`'s own, a second
+  system can't "queue" for an action once it's bound, same as
+  `CameraController`'s lack of a queue.
+- No built-in pairing with `CameraController` for cutscenes, see above.
+- No default action set (movement, jump) registered, this controller is
+  purely a binding/ownership layer, not a preset input scheme.
+
+Diff pushed, awaiting review.
