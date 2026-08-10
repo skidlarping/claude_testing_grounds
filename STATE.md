@@ -189,3 +189,66 @@ without needing a handler at all, backed by the in-memory cache built on
   checks made before `DataLoaded` fires will read as "not owned."
 
 Diff not pushed, awaiting review.
+
+## Session: SoundService creation
+
+### Path
+Same deviation as the other services: task requested
+`src/server/services/SoundService.luau`, placed at
+`src/services/SoundService.luau` to match the actual Rojo mapping in
+`default.project.json`. Also added `src/controllers/SoundController.luau`,
+required for `PlayLocal` to actually do anything (see below), mapped by
+`default.project.json` to `StarterPlayer/StarterPlayerScripts/Controllers`.
+This is the first file in that mapping, the folder didn't exist before this
+session.
+
+### Global vs local mechanism
+Both methods rely on native Roblox behavior rather than any custom
+replication or filtering:
+- `PlayGlobal` parents a `Sound` instance to the built-in
+  `game:GetService("SoundService")`, not `workspace`. A sound parented there
+  is non-positional and replicates to every client the same way any other
+  instance does, no per-player logic needed on the service's part.
+- `PlayLocal` cannot be done server-side at all, only the owning client can
+  restrict playback to itself. The server validates the sound id, then fires
+  a single-recipient `PlayLocalSound` RemoteEvent (via `Net`, the existing
+  networking package, not a new integration) to the target player only.
+  `SoundController` on the client receives it and calls the built-in
+  `RobloxSoundService:PlayLocalSound(sound)`, which is the native Roblox API
+  for playing a sound that only the calling client hears.
+
+### Security
+`PlayLocal` uses `RemoteEvent:FireClient(player, ...)`, not
+`FireAllClients`, so only the intended player ever receives the payload.
+There is no `OnServerEvent` handler anywhere in this feature, the RemoteEvent
+is strictly server-to-client, so no client can trigger a sound for another
+player or for themselves. Both `PlayGlobal` and `PlayLocal` reject non-number
+or non-positive `soundId` values before doing anything else, and always
+build the `rbxassetid://` prefix internally rather than accepting an
+already-formed string, so callers can't pass arbitrary `SoundId` content.
+
+### Cleanup
+`CleanupSound` destroys the server-side `Sound` instance on `Ended`, plus a
+`CONFIG.SOUND_LIFETIME` (30s) `task.delay` fallback in case the asset fails
+to load and `Ended` never fires. `Destroy()` is idempotent so both paths
+firing isn't an issue. The client-side sound in `SoundController` only has
+the `Ended` cleanup, no fallback timer, since a failed local sound is a
+single small leaked instance on one client rather than a server-wide leak.
+
+### API surface
+- `SoundService:PlayGlobal(soundId: number, volume: number?)`, plays a sound
+  for every player.
+- `SoundService:PlayLocal(player: Player, soundId: number, volume: number?)`,
+  plays a sound for one specific player only.
+- Volume is optional on both, defaults to `CONFIG.DEFAULT_VOLUME` (1) and is
+  clamped to `CONFIG.MAX_VOLUME` (10).
+
+### Not done / open items
+- No looping, pitch, or `SoundGroup` support, kept to the minimum the task
+  asked for (play locally, play globally).
+- No queueing or priority handling if a player receives many `PlayLocal`
+  calls in quick succession, each just plays independently.
+- No `ServerLog` integration for the invalid-`soundId` warnings, same gap
+  noted for the other services, still local `warn()` calls.
+
+Diff pushed, awaiting review.
