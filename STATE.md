@@ -749,3 +749,62 @@ expected case, not a bug.
   render order.
 
 Diff pushed, awaiting review.
+
+## Session: CameraController / InputController pairing
+
+### What changed
+`InputController` gained `Suspend(owner)` / `Resume(owner)`, and
+`CameraController:Request` / `Release` now call them automatically.
+Requesting the camera also suspends every other owner's input bindings;
+releasing the camera restores them exactly as they were.
+
+### Why this over the alternative
+Considered leaving this to callers (`Request` camera + `UnbindAll` input as
+two separate calls per site), which is more explicit and doesn't couple
+two otherwise-independent controllers. Went with automatic pairing instead
+because `UnbindAll(owner)` alone wasn't sufficient, it only removes actions
+the *same* owner bound, not other systems' actions still active during a
+camera lock (combat, slap, movement). Actually blocking other systems
+needs a suspend/restore of *other* owners' bindings, which only
+`InputController` can do since it's the only thing that knows the full set
+of currently bound actions and their original `ContextActionService`
+arguments.
+
+### InputController changes
+`bindings` (new) stores the full record per action (`Owner`, `Handler`,
+`CreateTouchButton`, `Args` via `table.pack`), previously only `owners` was
+tracked, which wasn't enough to rebind later. `Suspend(owner)` unbinds
+every action *not* owned by `owner`, snapshots each into
+`suspendedBindings`, and sets a module-level `suspendedBy` flag that
+`Bind` now checks, no other owner can bind a new action while suspended.
+`Resume(owner)` only proceeds if `suspendedBy == owner` (same
+non-owner-can't-release guard as everywhere else in this controller),
+rebinds every snapshotted action via `ContextActionService:BindAction`
+with its original args, then clears the suspend state. `Suspend` denies
+(warns, returns `false`) if something else already holds the suspend, same
+denial pattern as `Bind`/`CameraController:Request`.
+
+### CameraController changes
+Requires `InputController` (client-side sibling require via
+`Players.LocalPlayer.PlayerScripts.Controllers`, not
+`ServerScriptService.Services`, since this is entirely client-side).
+`Request` calls `InputController:Suspend(owner)` right after acquiring the
+camera lock. `Release` calls `InputController:Resume(owner)` right after
+restoring camera state. Not treated as a hard dependency, if
+`InputController:Suspend` is denied (something else already suspended
+input independently), `CameraController` still proceeds with the camera
+lock and just logs the warn from `InputController`, camera and input
+locks are coupled by default but not fused into one failure path.
+
+### Not done / open items
+- `InputController:Suspend` denial doesn't roll back `CameraController`'s
+  already-acquired camera lock, an edge case (something else suspended
+  input right as camera was requested) where you'd have the camera locked
+  but not input. Narrow enough (both locks are normally requested by the
+  same owner in sequence) that it wasn't hardened against this session.
+- No re-suspend/extend, calling `Request` again while already suspended by
+  the same owner isn't a distinct code path, `Request` itself already
+  denies a second lock from a different owner before `Suspend` is ever
+  reached.
+
+Diff pushed, awaiting review.

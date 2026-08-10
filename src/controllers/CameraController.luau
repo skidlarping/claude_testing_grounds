@@ -5,6 +5,10 @@ local RunService = game:GetService("RunService")
 local packages = ReplicatedStorage.Packages
 local Signal = require(packages.Signal)
 
+local playerScripts = Players.LocalPlayer:WaitForChild("PlayerScripts")
+local controllers = playerScripts:WaitForChild("Controllers")
+local InputController = require(controllers.InputController)
+
 local DEFAULT_FIELD_OF_VIEW = 70
 
 local camera = workspace.CurrentCamera
@@ -51,6 +55,8 @@ function CameraController:Request(owner: string): boolean
 	currentOwner = owner
 	savedState = CaptureDefaultState()
 
+	InputController:Suspend(owner)
+
 	self.OwnerChanged:Fire(currentOwner)
 
 	return true
@@ -68,6 +74,8 @@ function CameraController:Release(owner: string)
 	if savedState then
 		ApplyState(savedState)
 	end
+
+	InputController:Resume(owner)
 
 	savedState = nil
 	currentOwner = nil
