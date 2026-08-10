@@ -60,4 +60,4 @@ Every service and controller exposes `:Init()`. Nothing outside `server/init.ser
 
 ## Conventions
 
-See `STYLE.md` and `selene.toml` for linting and code style. See `STATE.md` for a running log of what's been built and why, session by session.
+See `STYLE.md` for code style. See `STATE.md` for a running log of what's been built and why, session by session.

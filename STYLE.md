@@ -143,6 +143,3 @@ Every service and controller exposes `:Init()`, and only `:Init()` — no other 
 
 A module never states its own script type (Script/LocalScript/ModuleScript) or where it's placed in the hierarchy — that's entirely owned by `default.project.json` and the folder it's dropped into, not by the file's contents.
 
-## Linting
-
-`selene.toml` is the source of truth for anything not covered here. Run `selene src` before committing.
