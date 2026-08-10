@@ -297,3 +297,66 @@ client-replication mode, out of scope for what was asked this session.
   future cleanup, not done automatically here to avoid an unrelated diff.
 
 Diff pushed, awaiting review.
+
+## Session: RateLimitService creation
+
+### Path
+`src/services/RateLimitService.luau`, same Rojo mapping as every other
+service.
+
+### Scope
+Standalone like `LoggingService`, only depends on `Players`, no `Net`,
+`Signal`, or `DataService`. Meant to be called from inside a remote handler
+as the first line, before any other logic runs, in any project.
+
+### Design
+Fixed-window counter per `(player, key)`. A "key" is whatever string the
+caller wants to rate limit under, typically a remote name. Two methods:
+- `RateLimitService:Register(key, maxCalls, window)`, called once (e.g. from
+  the owning service's `Init`) to define the limit for that key.
+- `RateLimitService:Check(player, key): boolean`, called on every attempt.
+  Returns `true` and counts the call if the player is still under
+  `maxCalls` within the current `window` (seconds), `false` otherwise. When
+  the window has elapsed since `StartTime`, the count resets.
+
+### Fail-closed on unregistered keys
+`Check` against a key nobody called `Register` for returns `false` and
+`warn()`s, rather than defaulting to allowed. This was a deliberate choice
+over fail-open: a security-facing service should break loudly and obviously
+during testing if setup was forgotten, not silently pass every call through
+unlimited. Fail-open would only show up as a problem once someone actually
+exploits the gap.
+
+### Cleanup
+`Players.PlayerRemoving` clears `records[player]` entirely, connected
+inline in `Init` since there's nothing to disconnect later.
+
+### Usage pattern
+Not enforced automatically, still relies on each remote handler actually
+calling `Check` first. Discussed with Brax as the known limitation, this
+service closes the "someone forgets a per-remote debounce" gap and makes
+limits centrally readable/tunable, but doesn't make calling it mandatory.
+Intended pattern for future remotes:
+```
+RateLimitService:Register("SpareOrKill", 5, 10) -- once, e.g. in Init
+
+-- in the remote handler, first line:
+if not RateLimitService:Check(player, "SpareOrKill") then
+	return
+end
+```
+
+### Not done / open items
+- No integration into any existing remote yet, `PlayLocalSound` and
+  `ServerLog` are both effectively low-risk (one plays a harmless sound,
+  the other is server-to-client only) so neither was retrofitted this
+  session.
+- No burst-vs-sustained distinction (e.g. token bucket), fixed window can
+  allow up to `2x maxCalls` in quick succession right at a window boundary.
+  Not addressed since it's a minor edge case for the intended use (blocking
+  gross spam, not precise rate shaping) and would add complexity against
+  the "lightweight and simple" goal.
+- No per-key default (e.g. auto-register with a fallback limit), by design,
+  see fail-closed reasoning above.
+
+Diff pushed, awaiting review.
