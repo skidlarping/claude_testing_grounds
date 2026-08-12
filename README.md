@@ -56,7 +56,7 @@ Every service and controller exposes `:Init()`. Nothing outside `server/init.ser
 | `CameraController` | Owns `workspace.CurrentCamera`, single-owner lock (`Request` / `Release`) so cutscenes and other camera systems can't fight over state, saves/restores default camera state on release. |
 | `InputController` | Wraps `ContextActionService` with per-action ownership locking, same lock pattern as `CameraController`, plus `UnbindAll` for cleanup. |
 | `CharacterController` | Owns `CharacterAdded`, applies default `WalkSpeed` / `JumpPower`, exposes a shared `Trove` other controllers can add per-character cleanup to. |
-| `UIController` | Registry of `ScreenGui` / `GuiObject` screens with `Open` / `Close` / `CloseAll`, tracks an open-screen stack for back-navigation. Not exclusive, multiple screens can be open at once. |
+| `UIController` | Auto-registers every `Frame` under `PlayerGui.Main.Frames` on `Init`, exposes `Open` / `Close` / `CloseAll` / `GetFrame`, tracks an open-screen stack for back-navigation. Not exclusive, multiple frames can be open at once. |
 
 ## Conventions
 

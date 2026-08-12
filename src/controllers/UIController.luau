@@ -1,9 +1,13 @@
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local packages = ReplicatedStorage.Packages
 local Signal = require(packages.Signal)
 
-local screens = {}
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local frames = {}
 local stack = {}
 
 local UIController = {}
@@ -11,33 +15,11 @@ local UIController = {}
 UIController.ScreenOpened = Signal.new()
 UIController.ScreenClosed = Signal.new()
 
-local function SetScreenVisible(screen: ScreenGui | GuiObject, visible: boolean)
-	if screen:IsA("ScreenGui") then
-		screen.Enabled = visible
-
-		return
-	end
-
-	screen.Visible = visible
-end
-
-function UIController:Register(name: string, screen: ScreenGui | GuiObject)
-	if screens[name] then
-		warn("UIController: \"" .. name .. "\" is already registered")
-
-		return
-	end
-
-	screens[name] = screen
-
-	SetScreenVisible(screen, false)
-end
-
 function UIController:Open(name: string): boolean
-	local screen = screens[name]
+	local frame = frames[name]
 
-	if not screen then
-		warn("UIController: Attempted to open unregistered screen \"" .. name .. "\"")
+	if not frame then
+		warn("UIController: Attempted to open unregistered frame \"" .. name .. "\"")
 
 		return false
 	end
@@ -48,7 +30,7 @@ function UIController:Open(name: string): boolean
 
 	table.insert(stack, name)
 
-	SetScreenVisible(screen, true)
+	frame.Visible = true
 
 	self.ScreenOpened:Fire(name)
 
@@ -56,10 +38,10 @@ function UIController:Open(name: string): boolean
 end
 
 function UIController:Close(name: string): boolean
-	local screen = screens[name]
+	local frame = frames[name]
 
-	if not screen then
-		warn("UIController: Attempted to close unregistered screen \"" .. name .. "\"")
+	if not frame then
+		warn("UIController: Attempted to close unregistered frame \"" .. name .. "\"")
 
 		return false
 	end
@@ -72,7 +54,7 @@ function UIController:Close(name: string): boolean
 
 	table.remove(stack, index)
 
-	SetScreenVisible(screen, false)
+	frame.Visible = false
 
 	self.ScreenClosed:Fire(name)
 
@@ -93,7 +75,19 @@ function UIController:GetTopScreen(): string?
 	return stack[#stack]
 end
 
+function UIController:GetFrame(name: string): Frame?
+	return frames[name]
+end
+
 function UIController:Init()
+	local main = playerGui:WaitForChild("Main")
+	local container = main:WaitForChild("Frames")
+
+	for _, frame in container:GetChildren() do
+		frames[frame.Name] = frame
+
+		frame.Visible = false
+	end
 end
 
 return UIController
