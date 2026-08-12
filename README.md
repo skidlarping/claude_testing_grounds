@@ -47,7 +47,6 @@ Every service and controller exposes `:Init()`. Nothing outside `server/init.ser
 | `LoggingService` | Timestamped `Print` / `Warn` / `Error`, server-console only, `Error` uses `warn()` to avoid unwinding the caller's stack. |
 | `RateLimitService` | Fixed-window per-player rate limiting, `Register` a key then `Check` against it. |
 | `AnalyticsService` | Wraps Roblox's `AnalyticsService` for onboarding funnels, economy events, and progression tracking. |
-| `RoundService` | Generic round lifecycle state machine (`Waiting` / `Intermission` / `InRound` / `Ending`), config-driven timing, empty-server handling. No win-condition logic, that's game-specific. |
 
 ## Controllers
 

@@ -808,3 +808,11 @@ locks are coupled by default but not fused into one failure path.
   reached.
 
 Diff pushed, awaiting review.
+
+## Session: RoundService removed
+
+`RoundService` pulled out of the template entirely. It's a design
+commitment to round-based gameplay (`Waiting`/`Intermission`/`InRound`/
+`Ending`), not universal infrastructure, most games built off this
+template won't be round-based. Belongs in a round-based game's own repo
+instead. `src/services/RoundService.luau` deleted, README row removed.
