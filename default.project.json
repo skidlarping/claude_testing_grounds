@@ -35,33 +35,6 @@
       }
     },
 
-    "StarterGui": {
-      "Main": {
-        "$className": "ScreenGui",
-
-        "Frames": {
-          "$className": "Frame",
-          "$properties": {
-            "BackgroundTransparency": 1,
-            "Size": [
-              1,
-              0,
-              1,
-              0
-            ]
-          }
-        },
-
-        "HUD": {
-          "$className": "Frame"
-        }
-      },
-
-      "Effects": {
-        "$className": "ScreenGui"
-      }
-    },
-
     "Workspace": {
       "$properties": {
         "FilteringEnabled": true

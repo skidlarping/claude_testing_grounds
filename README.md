@@ -14,6 +14,8 @@ Open `claude_testing_place.rbxlx` in Studio, then run:
 rojo serve
 ```
 
+`StarterGui` isn't synced through `default.project.json`, build it manually in Studio for each project: a `ScreenGui` named `Main` containing a `Frame` named `Frames` (container for screens `UIController` manages) and a `Frame` named `HUD`, plus a sibling `ScreenGui` named `Effects`.
+
 ## Structure
 
 ```

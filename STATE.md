@@ -816,3 +816,11 @@ commitment to round-based gameplay (`Waiting`/`Intermission`/`InRound`/
 `Ending`), not universal infrastructure, most games built off this
 template won't be round-based. Belongs in a round-based game's own repo
 instead. `src/services/RoundService.luau` deleted, README row removed.
+
+## Session: StarterGui removed from project.json
+
+`StarterGui` block added in a prior session does not sync through Rojo.
+Removed from `default.project.json` rather than leave dead config in the
+template. `Main` (`ScreenGui`) / `Frames` (`Frame`) / `HUD` (`Frame`) /
+`Effects` (`ScreenGui`) now built manually in Studio per project, noted
+in README under Setup.
