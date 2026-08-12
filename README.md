@@ -39,6 +39,7 @@ Every service and controller exposes `:Init()`. Nothing outside `server/init.ser
 | Service | Responsibility |
 |---|---|
 | `DataService` | Session-locked player data via `UpdateAsync`, retry logic, `BindToClose`, `SAVE_ENABLED` toggle. Fires `DataLoaded`. |
+| `PlayerService` | Gates on `DataService.DataLoaded` / `DataReleasing` to track per-player readiness, join time, and session length. Fires `PlayerReady` / `PlayerLeaving`, single place other services query "is this player fully loaded". |
 | `CurrencyService` | `Cash` / `CashMultiplier` get/set/add, built on `DataService`. |
 | `ProductService` | Wraps `ProcessReceipt`, dispatches through a `PRODUCT_HANDLERS` table. |
 | `GamepassService` | Caches ownership per player, dispatches through `GAMEPASS_HANDLERS`, exposes `Owns()`. |
