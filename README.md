@@ -1,14 +1,14 @@
-# claude_testing_grounds
+# repo_template
 
 Standalone Roblox backend template built on [Rojo](https://github.com/rojo-rbx/rojo), meant to be copied over as the starting point for new projects. R6 only.
 
 ## Setup
 
 ```bash
-rojo build -o "claude_testing_place.rbxlx"
+rojo build -o "repo_template.rbxlx"
 ```
 
-Open `claude_testing_place.rbxlx` in Studio, then run:
+Open `repo_template.rbxlx` in Studio, then run:
 
 ```bash
 rojo serve
